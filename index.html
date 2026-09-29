@@ -13,7 +13,7 @@ button,label.file{border:0;border-radius:10px;padding:8px 10px;margin:3px;backgr
 button.secondary{background:#38545a;color:#fff}input[type=file]{display:none}
 #cam{position:fixed;right:12px;bottom:12px;width:160px;z-index:9;border-radius:12px;display:none;transform:scaleX(-1);opacity:.7}
 #hint{position:fixed;bottom:12px;left:14px;z-index:5;color:#fff9;font-size:12px;text-shadow:0 1px 4px #000}
-#fallback.status3d{opacity:.18}
+#fallback.status3d{opacity:0;pointer-events:none}
 #fallback .parallax{transform-origin:50% 55%;transition:transform .05s linear}
 @media(max-width:650px){#ui{left:10px;top:10px;max-width:calc(100vw - 20px)}}
 </style>
@@ -78,11 +78,11 @@ function apply2DView(){
   const sx=-viewSmooth.x*170,sy=viewSmooth.y*90,sc=1+viewSmooth.z*.05;
   parallax.setAttribute('transform',`translate(${sx} ${sy}) scale(${sc}) translate(${(1-sc)*600} ${(1-sc)*350})`);
 }
-function tryWebGL(){
+async function try3D(){
   try{
     const test=document.createElement('canvas');
     const gl=test.getContext('webgl2',{failIfMajorPerformanceCaveat:false})||test.getContext('webgl',{failIfMajorPerformanceCaveat:false});
-    if(!gl)return false;
+    if(!gl)throw new Error('WebGL unavailable');
     renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'low-power',failIfMajorPerformanceCaveat:false});
     renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);
     renderer.outputColorSpace=THREE.SRGBColorSpace;document.body.appendChild(renderer.domElement);
@@ -104,7 +104,39 @@ function tryWebGL(){
     const eyeMat=mat('#222');for(const x of [-.12,.12]){const e=new THREE.Mesh(new THREE.SphereGeometry(.028,7,7),eyeMat);e.position.set(x,1.7,.32);dg.add(e)}
     window.__dancerGroup=dg;window.__placeholder={body,head,dg};
     webglOK=true;fallback.classList.add('status3d');status('3D公園モードで起動しました 🌱');return true;
-  }catch(e){console.warn('3D unavailable:',e);webglOK=false;renderer?.dispose();renderer?.domElement.remove();renderer=null;status('WebGLが使えないので軽量2Dモードで起動しました。公園はそのまま動きます 🌱');return false}
+  }catch(webglError){
+    console.warn('WebGL unavailable, trying WebGPU:',webglError);
+    try{
+      const gpu=await import('https://esm.sh/three@0.170.0/webgpu');
+      const WebGPU= gpu.WebGPURenderer;
+      if(!WebGPU)throw new Error('WebGPURenderer was not exported');
+      renderer=new WebGPU({antialias:false,powerPreference:'low-power'});
+      renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);
+      await renderer.init();
+      scene=new THREE.Scene();scene.background=new THREE.Color('#94ccec');scene.fog=new THREE.Fog('#94ccec',25,70);
+      camera3D=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.03,120);
+      scene.add(new THREE.HemisphereLight('#e7f5ff','#64874e',2));
+      const sun=new THREE.DirectionalLight('#fff1bd',2);sun.position.set(-5,10,4);scene.add(sun);
+      const mat=c=>new THREE.MeshStandardMaterial({color:c,roughness:.95});
+      const ground=new THREE.Mesh(new THREE.PlaneGeometry(120,120),mat('#79b85d'));ground.rotation.x=-Math.PI/2;ground.position.y=-.02;scene.add(ground);
+      const path=new THREE.Mesh(new THREE.PlaneGeometry(2.4,50),mat('#e2cda1'));path.rotation.x=-Math.PI/2;path.position.set(2.5,.01,-16);scene.add(path);
+      const trunk=mat('#785337'),leaves=[mat('#4e9b54'),mat('#6eb75b'),mat('#8ac85b')],sph=new THREE.SphereGeometry(1,8,7);
+      function tree2(x,z,scale){const g=new THREE.Group(),t=new THREE.Mesh(new THREE.CylinderGeometry(.16,.23,2.3,7),trunk);t.position.y=1.15;g.add(t);for(let j=0;j<3;j++){const l=new THREE.Mesh(sph,leaves[j]);l.position.set((j-1)*.45,2.45+(j%2)*.2,0);g.add(l)}g.position.set(x,0,z);g.scale.setScalar(scale);scene.add(g)}
+      for(let j=0;j<24;j++)tree2((j*37%45)-22,-4-(j*19%44),.75+(j%4)*.13);
+      const dg=new THREE.Group();dg.position.set(0,0,-3);scene.add(dg);
+      const body=new THREE.Mesh(new THREE.CapsuleGeometry(.28,.6,4,10),mat('#8cdb75'));body.position.y=.9;dg.add(body);
+      const head=new THREE.Mesh(new THREE.SphereGeometry(.34,14,10),mat('#ead6b8'));head.position.y=1.68;dg.add(head);
+      for(const x of [-.22,.22]){const e=new THREE.Mesh(new THREE.ConeGeometry(.13,.4,7),mat('#8cdb75'));e.position.set(x,2.04,0);e.rotation.z=x>0?-.25:.25;dg.add(e)}
+      const eyeMat=mat('#222');for(const x of [-.12,.12]){const e=new THREE.Mesh(new THREE.SphereGeometry(.028,7,7),eyeMat);e.position.set(x,1.7,.32);dg.add(e)}
+      window.__dancerGroup=dg;window.__placeholder={body,head,dg};
+      webglOK=true;fallback.classList.add('status3d');status('WebGPU 3D公園モードで起動しました 🌱');return true;
+    }catch(webgpuError){
+      console.warn('WebGPU unavailable:',webgpuError);
+      webglOK=false;renderer?.dispose?.();renderer?.domElement?.remove?.();renderer=null;
+      status('3D APIが使えないので軽量2Dモードで起動しました。Chromeのグラフィック設定を確認してください。');
+      return false;
+    }
+  }
 }
 function updateProjection(){
  if(!webglOK||!camera3D)return;
@@ -183,7 +215,7 @@ function animate(now){
  }
 }
 addEventListener('resize',()=>{if(renderer)renderer.setSize(innerWidth,innerHeight);updateProjection()});
-tryWebGL();
+try3D().then(ok=>{if(ok)loadVRM('./models/Zundamon.vrm')});
 // The VRM is optional and is loaded explicitly to avoid a startup 404 when it is not published.
 requestAnimationFrame(animate);
 </script>
