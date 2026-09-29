@@ -23,10 +23,20 @@ let voiceUrl=null;const voiceAudio=new Audio();
 $('voice').onchange=e=>{const file=e.target.files[0];if(!file)return;if(voiceUrl)URL.revokeObjectURL(voiceUrl);voiceUrl=URL.createObjectURL(file);voiceAudio.src=voiceUrl;status('音声をセット！ 🔊')};
 $('speak').onclick=async()=>{try{voiceAudio.currentTime=0;await voiceAudio.play();status('ずんだもんがしゃべっているよ！')}catch(e){status('音声ファイルを選んでね（VOICEVOXで作ったWAVなど）')}};
 const scene=new THREE.Scene();scene.background=new THREE.Color('#94ccec');scene.fog=new THREE.Fog('#94ccec',22,62);
-const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;document.body.prepend(renderer.domElement);
+let renderer=null,webglOK=false;
+try{
+ renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'low-power',failIfMajorPerformanceCaveat:false});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;
+ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;document.body.prepend(renderer.domElement);webglOK=true;
+}catch(err){
+ console.warn('WebGL unavailable; using 2D fallback:',err);
+ const fallback=document.createElement('canvas');fallback.id='fallback';fallback.width=innerWidth*devicePixelRatio;fallback.height=innerHeight*devicePixelRatio;
+ fallback.style.width='100vw';fallback.style.height='100vh';document.body.prepend(fallback);
+ window.fallbackCanvas=fallback;
+}
 const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.03,120);scene.add(new THREE.HemisphereLight('#e7f5ff','#64874e',2.2));
-const sun=new THREE.DirectionalLight('#fff2c4',2.4);sun.position.set(-6,11,4);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-16;sun.shadow.camera.right=16;sun.shadow.camera.top=16;sun.shadow.camera.bottom=-16;scene.add(sun);
+const sun=new THREE.DirectionalLight('#fff2c4',2.4);sun.position.set(-6,11,4);sun.castShadow=webglOK;
+if(webglOK){sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-16;sun.shadow.camera.right=16;sun.shadow.camera.top=16;sun.shadow.camera.bottom=-16}scene.add(sun);
 const mat=(c)=>new THREE.MeshStandardMaterial({color:c,roughness:.94});
 const grass=mat('#79b85d'),bark=mat('#785337'),leaf=[mat('#4e9b54'),mat('#6eb75b'),mat('#8ac85b')];
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(140,140),grass);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
@@ -63,6 +73,23 @@ async function loadModel(url){status('VRMを読み込み中…');try{const gltf=
 $('model').onchange=async e=>{const f=e.target.files[0];if(f){const url=URL.createObjectURL(f);await loadModel(url);URL.revokeObjectURL(url)}};
 loadModel('./models/Zundamon.vrm').catch(()=>{});
 const headPos=new THREE.Vector3(0,0,0),target=new THREE.Vector3(0,0,0);
+function drawFallback(){
+ const c=window.fallbackCanvas;if(!c)return;const ctx=c.getContext('2d');const dpr=devicePixelRatio||1,w=innerWidth,h=innerHeight;
+ if(c.width!==Math.floor(w*dpr)||c.height!==Math.floor(h*dpr)){c.width=Math.floor(w*dpr);c.height=Math.floor(h*dpr)}
+ ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+ const xShift=-headPos.x*260,yShift=headPos.y*180,z=Math.max(-.2,headPos.z);
+ const sky=ctx.createLinearGradient(0,0,0,h*.62);sky.addColorStop(0,'#79c7ef');sky.addColorStop(1,'#d9f3ff');ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
+ ctx.fillStyle='#78b95d';ctx.fillRect(0,h*.53,w,h*.47);
+ ctx.fillStyle='#dfcb9c';ctx.beginPath();ctx.moveTo(w*.43+xShift,h);ctx.lineTo(w*.58+xShift,h);ctx.lineTo(w*.53+xShift,h*.53);ctx.lineTo(w*.48+xShift,h*.53);ctx.closePath();ctx.fill();
+ for(let i=0;i<18;i++){const px=((i*137)%w+xShift*0.25+w)%w,py=h*.38+((i*73)%Math.max(1,h*.35));ctx.fillStyle=i%3?'#4f9e55':'#8bc765';ctx.beginPath();ctx.arc(px,py,24+(i%4)*7,0,Math.PI*2);ctx.fill();ctx.fillStyle='#785337';ctx.fillRect(px-4,py+18,8,70)}
+ // simple dancing Zundamon fallback
+ const cx=w*.5+xShift,cy=h*.56-yShift-z*70;const bob=Math.abs(Math.sin(elapsed*3.2))*6;
+ ctx.save();ctx.translate(cx,cy-bob);ctx.rotate(Math.sin(elapsed*3.2)*.08);
+ ctx.fillStyle='#8cdb75';ctx.fillRect(-28,10,56,95);ctx.beginPath();ctx.arc(0,0,42,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#8cdb75';ctx.beginPath();ctx.moveTo(-24,-30);ctx.lineTo(-48,-92);ctx.lineTo(-5,-50);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(24,-30);ctx.lineTo(48,-92);ctx.lineTo(5,-50);ctx.closePath();ctx.fill();
+ ctx.fillStyle='#222';ctx.beginPath();ctx.arc(-14,2,5,0,Math.PI*2);ctx.arc(14,2,5,0,Math.PI*2);ctx.fill();ctx.restore();
+ ctx.fillStyle='#173119';ctx.font='700 14px system-ui';ctx.fillText('WebGL無効 → 軽量2Dモード',16,h-18);
+}
 let tracking=false,tracker=null,stream=null,detectBusy=false,lastDetect=0,baseFace=null;
 let faceReadyPromise=(async()=>{try{
  const engine=await import('./face-engine.js');
@@ -106,7 +133,7 @@ const ty=THREE.MathUtils.clamp((baseFace.cy-cy)*.7,-.25,.25);
 const tz=THREE.MathUtils.clamp((depth-1)*.65,-.25,.7);
 const next=new THREE.Vector3(tx,ty,tz);target.lerp(next,.35);
 }catch(e){console.warn(e)}}
-let last=performance.now();function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000,.05);last=now;elapsed+=dt;detect(now);if(!tracking)target.set(mouseX,mouseY,wheel);headPos.lerp(target,1-Math.exp(-dt*10));updateProjection();animateDance(elapsed);renderer.render(scene,camera)}
-addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);updateProjection()});requestAnimationFrame(frame);
-status('公園完成！ VRMを選ぶか、models/Zundamon.vrm を配置してね');
+let last=performance.now();function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000,.05);last=now;elapsed+=dt;detect(now);if(!tracking)target.set(mouseX,mouseY,wheel);headPos.lerp(target,1-Math.exp(-dt*10));updateProjection();animateDance(elapsed);webglOK?renderer.render(scene,camera):drawFallback()}
+addEventListener('resize',()=>{if(renderer)renderer.setSize(innerWidth,innerHeight);updateProjection()});requestAnimationFrame(frame);
+status(webglOK?'公園完成！ VRMを選ぶか、models/Zundamon.vrm を配置してね':'WebGLが無効なので軽量2Dモードで起動中。Chromeのハードウェアアクセラレーションを有効にすると3Dになります。');
 </script></body></html>
