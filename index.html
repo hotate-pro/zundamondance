@@ -4,6 +4,7 @@
 *{box-sizing:border-box}body{margin:0;background:#101c22;color:white;font-family:system-ui,sans-serif;overflow:hidden}canvas{display:block}
 #ui{position:fixed;top:16px;left:16px;background:#10272ddd;backdrop-filter:blur(12px);border:1px solid #ffffff33;border-radius:18px;padding:16px;max-width:330px;z-index:3;box-shadow:0 8px 30px #0004}h1{font-size:19px;margin:0 0 9px}p{font-size:12px;line-height:1.6;margin:8px 0}button,label.file{border:0;border-radius:10px;padding:9px 12px;background:#9ee57b;color:#173119;font-weight:700;cursor:pointer;display:inline-block;margin:3px}button.secondary{background:#344f55;color:white}input[type=file]{display:none}#status{color:#d1f4d4}#cam{position:fixed;right:12px;bottom:12px;width:150px;border-radius:12px;opacity:.65;transform:scaleX(-1);display:none}#hint{position:fixed;bottom:14px;left:16px;font-size:12px;color:#fff9;text-shadow:0 1px 5px #000}#ui.min #details{display:none}@media(max-width:600px){#ui{max-width:calc(100vw - 24px);top:10px;left:12px;padding:11px}h1{font-size:16px}}
 </style>
+<script type="importmap">{"imports":{"three":"https://esm.sh/three@0.170.0","three/addons/":"https://esm.sh/three@0.170.0/examples/jsm/","@pixiv/three-vrm":"https://esm.sh/@pixiv/three-vrm@3.4.2?external=three"}}</script>
 </head>
 <body><section id="ui"><h1>🌱 ずんだもんバーチャル窓</h1><div id="details">
 <p id="status">公園を準備中…</p>
@@ -12,14 +13,13 @@
 <p>頭を動かして公園をのぞこう！ 顔追跡なしでもマウス・タッチで試せます。VRMが未登録の場合は仮キャラを表示します。</p>
 <p>顔追跡はカメラ映像を端末内で処理します。顔までの距離は概算です。明るい場所で試してね。</p></div><button id="collapse" class="secondary">パネルを隠す</button></section>
 <video id="cam" autoplay muted playsinline></video><div id="hint">マウス移動：視点変更　|　ホイール：距離変更　|　F：全画面</div>
-<script type="module" src="./bundle.js"></script><script type="text/plain" id="build-source">
+<script type="module">
 import * as THREE from 'three';
-import {FaceLandmarker,FilesetResolver} from '@mediapipe/tasks-vision';
 import {parseVMD,createVMDPlayer} from './vmd.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {VRMLoaderPlugin,VRMUtils} from '@pixiv/three-vrm';
 const $=id=>document.getElementById(id),status=s=>$('status').textContent=s;
-let voiceUrl=null;const voiceAudio=new Audio('./audio/zundamon.wav');
+let voiceUrl=null;const voiceAudio=new Audio();
 $('voice').onchange=e=>{const file=e.target.files[0];if(!file)return;if(voiceUrl)URL.revokeObjectURL(voiceUrl);voiceUrl=URL.createObjectURL(file);voiceAudio.src=voiceUrl;status('音声をセット！ 🔊')};
 $('speak').onclick=async()=>{try{voiceAudio.currentTime=0;await voiceAudio.play();status('ずんだもんがしゃべっているよ！')}catch(e){status('音声ファイルを選んでね（VOICEVOXで作ったWAVなど）')}};
 const scene=new THREE.Scene();scene.background=new THREE.Color('#94ccec');scene.fog=new THREE.Fog('#94ccec',22,62);
@@ -46,7 +46,7 @@ const eyes=mat('#222b22');for(const x of [-.12,.12]){const eye=new THREE.Mesh(ne
 dancer.add(placeholder);
 let vrm=null,elapsed=0,motion=null,motionData=null;
 function getBone(name){return vrm?.humanoid?.getNormalizedBoneNode(name)}
-function animateDance(t){if(motion&&vrm){dancer.position.y=0;dancer.rotation.y=0;motion(t);vrm.update(1/60);return}const beat=t*3.2;dancer.position.y=Math.abs(Math.sin(beat))*.075;dancer.rotation.y=Math.sin(beat*.5)*.26;
+function animateDance(t){if(motion&&vrm){dancer.position.y=0;dancer.rotation.y=0;motion(t);vrm.humanoid?.update();return}const beat=t*3.2;dancer.position.y=Math.abs(Math.sin(beat))*.075;dancer.rotation.y=Math.sin(beat*.5)*.26;
 if(!vrm){body.rotation.z=Math.sin(beat)*.13;head.rotation.z=Math.sin(beat+.8)*.15;return}
 const set=(name,axis,value)=>{let b=getBone(name);if(b)b.rotation[axis]=value};
 set('hips','y',Math.sin(beat*.5)*.16);set('spine','z',Math.sin(beat)*.12);set('chest','z',Math.sin(beat+.3)*.1);
@@ -81,15 +81,25 @@ $('collapse').onclick=()=>{$('ui').classList.toggle('min');$('collapse').textCon
 addEventListener('keydown',e=>{if(e.key.toLowerCase()==='f')document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()});
 $('camera').onclick=async()=>{if(tracking){tracking=false;stream?.getTracks().forEach(t=>t.stop());$('cam').style.display='none';$('camera').textContent='📷 顔追跡を開始';status('マウス操作に切り替えました');return}
 try{
-status('顔認識ライブラリを読み込み中…');
-status('ローカルの顔認識WASMを読み込み中…');
+status('ローカル顔認識エンジンを起動中…');
+const {FaceDetector,FilesetResolver}=await import('./face-engine.js');
 const vision=await FilesetResolver.forVisionTasks('./vendor/mediapipe/');
-status('顔認識モデルを読み込み中…');
-tracker=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:'./vendor/mediapipe/face_landmarker.task',delegate:'CPU'},runningMode:'VIDEO',numFaces:1});
-stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:640,height:480},audio:false});$('cam').srcObject=stream;await $('cam').play();$('cam').style.display='block';tracking=true;baseFace=null;$('camera').textContent='⏹ 顔追跡を停止';status('顔追跡中！ 正面を向いて頭を動かしてね')}catch(e){console.error(e);stream?.getTracks().forEach(t=>t.stop());tracking=false;status('カメラを開始できません: '+e.message+'（マウス操作は使えます）')}}
-function detect(now){if(!tracking||!tracker||$('cam').readyState<2||now-lastDetect<65)return;lastDetect=now;try{const res=tracker.detectForVideo($('cam'),now);const pts=res.faceLandmarks?.[0];if(!pts)return;const left=pts[33],right=pts[263],nose=pts[1];if(!left||!right||!nose)return;const span=Math.hypot(left.x-right.x,left.y-right.y);if(span<.01)return;
-const cx=(left.x+right.x)/2,cy=(left.y+right.y)/2;if(!baseFace)baseFace={cx,cy,span};
-const ratio=baseFace.span/span;target.set(THREE.MathUtils.clamp((baseFace.cx-cx)*.55,-.32,.32),THREE.MathUtils.clamp((baseFace.cy-cy)*.42,-.25,.25),THREE.MathUtils.clamp((ratio-1)*.7,-.28,.7))}catch(e){console.warn(e)}}
+stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:320},height:{ideal:240},frameRate:{ideal:15,max:20}},audio:false});
+$('cam').srcObject=stream;await $('cam').play();status('超軽量顔検出器を起動中…');
+const base={modelAssetPath:'./vendor/mediapipe/blaze_face_short_range.tflite'};
+try{tracker=await FaceDetector.createFromOptions(vision,{baseOptions:{...base,delegate:'GPU'},runningMode:'VIDEO',minDetectionConfidence:.5})}catch{tracker=await FaceDetector.createFromOptions(vision,{baseOptions:{...base,delegate:'CPU'},runningMode:'VIDEO',minDetectionConfidence:.5})}
+$('cam').style.display='block';tracking=true;baseFace=null;$('camera').textContent='⏹ 顔追跡を停止';status('顔追跡中！ ローカル・超軽量モード 🌱')}catch(e){console.error(e);stream?.getTracks().forEach(t=>t.stop());tracking=false;status('カメラを開始できません: '+e.message+'（マウス操作は使えます）')}}
+function detect(now){if(!tracking||!tracker||$('cam').readyState<2||now-lastDetect<80)return;lastDetect=now;try{
+const res=tracker.detectForVideo($('cam'),now);const d=res.detections?.[0],b=d?.boundingBox;if(!b)return;
+const vw=$('cam').videoWidth||320,vh=$('cam').videoHeight||240;
+const cx=(b.originX+b.width*.5)/vw,cy=(b.originY+b.height*.5)/vh,size=Math.min(b.width/vw,b.height/vh);
+if(size<.02)return;if(!baseFace)baseFace={cx,cy,size};
+const depth=baseFace.size/size;
+const tx=THREE.MathUtils.clamp((baseFace.cx-cx)*.9,-.32,.32);
+const ty=THREE.MathUtils.clamp((baseFace.cy-cy)*.7,-.25,.25);
+const tz=THREE.MathUtils.clamp((depth-1)*.65,-.25,.7);
+const next=new THREE.Vector3(tx,ty,tz);target.lerp(next,.35);
+}catch(e){console.warn(e)}}
 let last=performance.now();function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000,.05);last=now;elapsed+=dt;detect(now);if(!tracking)target.set(mouseX,mouseY,wheel);headPos.lerp(target,1-Math.exp(-dt*10));updateProjection();animateDance(elapsed);renderer.render(scene,camera)}
 addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);updateProjection()});requestAnimationFrame(frame);
 status('公園完成！ VRMを選ぶか、models/Zundamon.vrm を配置してね');
