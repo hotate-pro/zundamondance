@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 const decoder=new TextDecoder('shift_jis');
 const mapping={
-'センター':'hips','下半身':'hips','上半身':'spine','上半身2':'chest','首':'neck','頭':'head',
+'センター':null,'下半身':'hips','上半身':'spine','上半身2':'chest','首':'neck','頭':'head',
 '左肩':'leftShoulder','左腕':'leftUpperArm','左ひじ':'leftLowerArm','左手首':'leftHand',
 '右肩':'rightShoulder','右腕':'rightUpperArm','右ひじ':'rightLowerArm','右手首':'rightHand',
 '左足':'leftUpperLeg','左ひざ':'leftLowerLeg','左足首':'leftFoot','左つま先':'leftToes',
