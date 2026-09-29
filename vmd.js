@@ -1,4 +1,5 @@
-// Lightweight VMD bone animation reader for VRM humanoids. Camera/morph tracks ignored.
+// VMD -> VRM normalized-humanoid retargeter.
+// Uses raw VMD quaternions (x,y,z,w), continuous loop interpolation, and no spring-bone simulation.
 import * as THREE from 'three';
 const decoder=new TextDecoder('shift_jis');
 const mapping={
@@ -10,36 +11,48 @@ const mapping={
 };
 export function parseVMD(buffer){
  const view=new DataView(buffer),bytes=new Uint8Array(buffer);let p=0;
- const str=n=>{let s=decoder.decode(bytes.subarray(p,p+n));p+=n;return s.replace(/\0.*$/s,'')};
+ const str=n=>{const s=decoder.decode(bytes.subarray(p,p+n));p+=n;return s.replace(/\0.*$/s,'')};
  const signature=str(30);if(!signature.startsWith('Vocaloid Motion Data'))throw Error('VMDファイルではありません');
  str(20);const count=view.getUint32(p,true);p+=4;
  if(count>2000000||p+count*111>buffer.byteLength)throw Error('VMDのデータが不正です');
- const tracks=new Map();
+ const tracks=new Map();let maxFrame=0;
  for(let i=0;i<count;i++){
   const name=str(15),frame=view.getUint32(p,true);p+=4;
   const pos=[view.getFloat32(p,true),view.getFloat32(p+4,true),view.getFloat32(p+8,true)];p+=12;
-  const rot=new THREE.Quaternion(view.getFloat32(p,true),view.getFloat32(p+4,true),-view.getFloat32(p+8,true),-view.getFloat32(p+12,true)).normalize();p+=16;
+  const rot=new THREE.Quaternion(view.getFloat32(p,true),view.getFloat32(p+4,true),view.getFloat32(p+8,true),view.getFloat32(p+12,true)).normalize();p+=16;
   const interp=bytes.slice(p,p+64);p+=64;
+  maxFrame=Math.max(maxFrame,frame);
   const bone=mapping[name];if(!bone)continue;
   if(!tracks.has(bone))tracks.set(bone,[]);
   tracks.get(bone).push({frame,rot,pos,interp});
  }
- let maxFrame=0;for(const keys of tracks.values()){keys.sort((a,b)=>a.frame-b.frame);maxFrame=Math.max(maxFrame,keys.at(-1).frame)}
- return {tracks,duration:Math.max(maxFrame/30,1/30),frames:count};
+ for(const keys of tracks.values())keys.sort((a,b)=>a.frame-b.frame);
+ return {tracks,duration:(maxFrame+1)/30,loopFrames:maxFrame+1,frames:count};
 }
 export function createVMDPlayer(vrm,vmd){
- const bones=new Map(),initial=new Map();
- for(const name of vmd.tracks.keys()){const b=vrm.humanoid?.getNormalizedBoneNode(name);if(b){bones.set(name,b);initial.set(name,b.quaternion.clone())}}
- const q=new THREE.Quaternion();
+ const bones=new Map(),initial=new Map(),temp=new THREE.Quaternion();
+ for(const name of vmd.tracks.keys()){
+  const b=vrm.humanoid?.getNormalizedBoneNode(name);
+  if(b){bones.set(name,b);initial.set(name,b.quaternion.clone())}
+ }
  return function update(seconds){
-  const f=((seconds%vmd.duration)+vmd.duration)%vmd.duration*30;
+  const f=((seconds*30)%vmd.loopFrames+vmd.loopFrames)%vmd.loopFrames;
   for(const [name,bone] of bones){
    const keys=vmd.tracks.get(name);if(!keys.length)continue;
-   let lo=0,hi=keys.length-1;while(lo<hi){const mid=(lo+hi+1)>>1;if(keys[mid].frame<=f)lo=mid;else hi=mid-1}
-   const a=keys[lo],b=keys[(lo+1)%keys.length];
-   const t=b.frame>a.frame?THREE.MathUtils.clamp((f-a.frame)/(b.frame-a.frame),0,1):0;
-   q.copy(a.rot).slerp(b.rot,t);
-   bone.quaternion.copy(initial.get(name)).multiply(q);
+   if(keys.length===1){temp.copy(keys[0].rot);}
+   else {
+    let hi=keys.length;
+    while(hi>0&&keys[hi-1].frame>f)hi--;
+    const ai=hi===0?keys.length-1:hi-1;
+    const bi=(ai+1)%keys.length;
+    const a=keys[ai],b=keys[bi];
+    let bf=b.frame;
+    if(bi===0)bf+=vmd.loopFrames;
+    let ff=f;if(ff<a.frame)ff+=vmd.loopFrames;
+    const t=bf>a.frame?THREE.MathUtils.clamp((ff-a.frame)/(bf-a.frame),0,1):0;
+    temp.copy(a.rot).slerp(b.rot,t);
+   }
+   bone.quaternion.copy(initial.get(name)).multiply(temp);
   }
- }
+ };
 }
