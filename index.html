@@ -8,12 +8,13 @@
 <body><section id="ui"><h1>🌱 ずんだもんバーチャル窓</h1><div id="details">
 <p id="status">公園を準備中…</p>
 <label class="file">VRMを読み込む<input id="model" type="file" accept=".vrm"></label>
-<button id="camera">📷 顔追跡を開始</button><button id="reset" class="secondary">視点リセット</button>
+<label class="file">VMDを読み込む<input id="motion" type="file" accept=".vmd"></label><button id="camera">📷 顔追跡を開始</button><button id="reset" class="secondary">視点リセット</button>
 <p>頭を動かして公園をのぞこう！ 顔追跡なしでもマウス・タッチで試せます。VRMが未登録の場合は仮キャラを表示します。</p>
 <p>顔追跡はカメラ映像を端末内で処理します。顔までの距離は概算です。明るい場所で試してね。</p></div><button id="collapse" class="secondary">パネルを隠す</button></section>
 <video id="cam" autoplay muted playsinline></video><div id="hint">マウス移動：視点変更　|　ホイール：距離変更　|　F：全画面</div>
 <script type="module">
 import * as THREE from 'three';
+import {parseVMD,createVMDPlayer} from './vmd.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {VRMLoaderPlugin,VRMUtils} from '@pixiv/three-vrm';
 const $=id=>document.getElementById(id),status=s=>$('status').textContent=s;
@@ -39,9 +40,9 @@ const head=new THREE.Mesh(new THREE.SphereGeometry(.33,16,12),skin);head.positio
 for(const x of [-.21,.21]){const ear=new THREE.Mesh(new THREE.ConeGeometry(.13,.38,7),green);ear.position.set(x,2.01,0);ear.rotation.z=x>0?-.25:.25;placeholder.add(ear)}
 const eyes=mat('#222b22');for(const x of [-.12,.12]){const eye=new THREE.Mesh(new THREE.SphereGeometry(.026,8,8),eyes);eye.position.set(x,1.69,.31);placeholder.add(eye)}
 dancer.add(placeholder);
-let vrm=null,elapsed=0;
+let vrm=null,elapsed=0,motion=null,motionData=null;
 function getBone(name){return vrm?.humanoid?.getNormalizedBoneNode(name)}
-function animateDance(t){const beat=t*3.2;dancer.position.y=Math.abs(Math.sin(beat))*.075;dancer.rotation.y=Math.sin(beat*.5)*.26;
+function animateDance(t){if(motion&&vrm){dancer.position.y=0;dancer.rotation.y=0;motion(t);vrm.update(1/60);return}const beat=t*3.2;dancer.position.y=Math.abs(Math.sin(beat))*.075;dancer.rotation.y=Math.sin(beat*.5)*.26;
 if(!vrm){body.rotation.z=Math.sin(beat)*.13;head.rotation.z=Math.sin(beat+.8)*.15;return}
 const set=(name,axis,value)=>{let b=getBone(name);if(b)b.rotation[axis]=value};
 set('hips','y',Math.sin(beat*.5)*.16);set('spine','z',Math.sin(beat)*.12);set('chest','z',Math.sin(beat+.3)*.1);
@@ -51,8 +52,10 @@ set('leftLowerArm','y',Math.sin(beat+.8)*.35);set('rightLowerArm','y',-Math.sin(
 set('leftUpperLeg','x',Math.sin(beat)*.3);set('rightUpperLeg','x',-Math.sin(beat)*.3);
 set('leftLowerLeg','x',Math.max(0,Math.sin(beat))*.28);set('rightLowerLeg','x',Math.max(0,-Math.sin(beat))*.28);
 vrm.update(1/60)}
+$('motion').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{motionData=parseVMD(await file.arrayBuffer());motion=vrm?createVMDPlayer(vrm,motionData):null;elapsed=0;status('YAJU＆U モーション読み込み完了！ '+motionData.frames+' キーフレーム')}catch(err){console.error(err);status('VMD読み込み失敗: '+err.message)}};
+fetch('./motions/YAJU-U.vmd').then(r=>{if(!r.ok)throw Error('not installed') ;return r.arrayBuffer()}).then(b=>{motionData=parseVMD(b);motion=vrm?createVMDPlayer(vrm,motionData):null;status('YAJU＆U モーション準備完了！')}).catch(()=>{});
 const loader=new GLTFLoader();loader.register(parser=>new VRMLoaderPlugin(parser));
-async function loadModel(url){status('VRMを読み込み中…');try{const gltf=await loader.loadAsync(url);if(!gltf.userData.vrm)throw Error('VRMとして読み込めませんでした');if(vrm){dancer.remove(vrm.scene);VRMUtils.deepDispose(vrm.scene)}vrm=gltf.userData.vrm;VRMUtils.rotateVRM0(vrm);vrm.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});placeholder.visible=false;dancer.add(vrm.scene);status('ずんだもん登場！ 公園でダンス中 🌱')}catch(e){console.error(e);status('VRM読み込み失敗: '+e.message)}}
+async function loadModel(url){status('VRMを読み込み中…');try{const gltf=await loader.loadAsync(url);if(!gltf.userData.vrm)throw Error('VRMとして読み込めませんでした');if(vrm){dancer.remove(vrm.scene);VRMUtils.deepDispose(vrm.scene)}vrm=gltf.userData.vrm;VRMUtils.rotateVRM0(vrm);if(motionData)motion=createVMDPlayer(vrm,motionData);vrm.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});placeholder.visible=false;dancer.add(vrm.scene);status('ずんだもん登場！ 公園でダンス中 🌱')}catch(e){console.error(e);status('VRM読み込み失敗: '+e.message)}}
 $('model').onchange=async e=>{const f=e.target.files[0];if(f){const url=URL.createObjectURL(f);await loadModel(url);URL.revokeObjectURL(url)}};
 loadModel('./models/Zundamon.vrm').catch(()=>{});
 const headPos=new THREE.Vector3(0,0,0),target=new THREE.Vector3(0,0,0);
