@@ -6,7 +6,7 @@
   "dependencies": {
     "three": "0.170.0",
     "@pixiv/three-vrm": "3.4.2",
-    "@mediapipe/tasks-vision": "0.10.22"
+    "@mediapipe/tasks-vision": "1.0.1"
   },
   "devDependencies": {
     "esbuild": "0.24.2"
