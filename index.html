@@ -95,7 +95,7 @@ function tryWebGL(){
     const path=new THREE.Mesh(new THREE.PlaneGeometry(2.4,50),mat('#e2cda1'));path.rotation.x=-Math.PI/2;path.position.set(2.5,.01,-16);scene.add(path);
     const trunk=mat('#785337'),leaves=[mat('#4e9b54'),mat('#6eb75b'),mat('#8ac85b')];
     const sph=new THREE.SphereGeometry(1,8,7);
-    function tree(x,z,s){const g=new THREE.Group();const t=new THREE.Mesh(new THREE.CylinderGeometry(.16,.23,2.3,7),trunk);t.position.y=1.15;g.add(t);for(let i=0;i<3;i++){const l=new THREE.Mesh(sph,leaves[(i+x+z+20)|0]%3);l.position.set((i-1)*.45,2.45+(i%2)*.2,0);g.add(l)}g.position.set(x,0,z);g.scale.setScalar(s);scene.add(g)}
+    function tree(x,z,s){const g=new THREE.Group();const t=new THREE.Mesh(new THREE.CylinderGeometry(.16,.23,2.3,7),trunk);t.position.y=1.15;g.add(t);for(let i=0;i<3;i++){const l=new THREE.Mesh(sph,leaves[(i%3+3)%3]);l.position.set((i-1)*.45,2.45+(i%2)*.2,0);g.add(l)}g.position.set(x,0,z);g.scale.setScalar(s);scene.add(g)}
     for(let i=0;i<24;i++)tree((i*37%45)-22,-4-(i*19%44),.75+(i%4)*.13);
     const dg=new THREE.Group();dg.position.set(0,0,-3);scene.add(dg);
     const body=new THREE.Mesh(new THREE.CapsuleGeometry(.28,.6,4,10),mat('#8cdb75'));body.position.y=.9;dg.add(body);
