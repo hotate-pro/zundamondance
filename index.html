@@ -76,8 +76,27 @@ $('reset').onclick=()=>{mouseX=mouseY=wheel=0;baseFace=null;target.set(0,0,0)};
 $('collapse').onclick=()=>{$('ui').classList.toggle('min');$('collapse').textContent=$('ui').classList.contains('min')?'設定を表示':'パネルを隠す'};
 addEventListener('keydown',e=>{if(e.key.toLowerCase()==='f')document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()});
 $('camera').onclick=async()=>{if(tracking){tracking=false;stream?.getTracks().forEach(t=>t.stop());$('cam').style.display='none';$('camera').textContent='📷 顔追跡を開始';status('マウス操作に切り替えました');return}
-try{status('カメラと顔認識を準備中…');const {FaceLandmarker,FilesetResolver}=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm');
-const vision=await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm');
+try{
+status('顔認識ライブラリを読み込み中…');
+const sources=[
+ {js:'https://esm.sh/@mediapipe/tasks-vision@0.10.22',wasm:'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'},
+ {js:'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm',wasm:'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'},
+ {js:'https://esm.sh/@mediapipe/tasks-vision@0.10.22?bundle',wasm:'https://unpkg.com/@mediapipe/tasks-vision@0.10.22/wasm'}
+];
+let vision,FaceLandmarker,failures=[];
+for(const source of sources){
+ try{
+  const lib=await import(/* @vite-ignore */source.js);
+  const Face=lib.FaceLandmarker??lib.default?.FaceLandmarker;
+  const Resolver=lib.FilesetResolver??lib.default?.FilesetResolver;
+  if(!Face||!Resolver)throw Error('必要なAPIが見つかりません');
+  status('顔認識WASMを読み込み中…');
+  const files=await Resolver.forVisionTasks(source.wasm);
+  FaceLandmarker=Face;vision=files;break;
+ }catch(err){failures.push(source.js+': '+err.message);console.warn('MediaPipe CDN failed',source.js,err)}
+}
+if(!vision)throw Error('全配信元で失敗。ネットワーク制限の可能性があります。 '+failures.join(' / '));
+status('顔認識モデルを読み込み中…');
 tracker=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',delegate:'CPU'},runningMode:'VIDEO',numFaces:1});
 stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:640,height:480},audio:false});$('cam').srcObject=stream;await $('cam').play();$('cam').style.display='block';tracking=true;baseFace=null;$('camera').textContent='⏹ 顔追跡を停止';status('顔追跡中！ 正面を向いて頭を動かしてね')}catch(e){console.error(e);stream?.getTracks().forEach(t=>t.stop());tracking=false;status('カメラを開始できません: '+e.message+'（マウス操作は使えます）')}}
 function detect(now){if(!tracking||!tracker||$('cam').readyState<2||now-lastDetect<65)return;lastDetect=now;try{const res=tracker.detectForVideo($('cam'),now);const pts=res.faceLandmarks?.[0];if(!pts)return;const left=pts[33],right=pts[263],nose=pts[1];if(!left||!right||!nose)return;const span=Math.hypot(left.x-right.x,left.y-right.y);if(span<.01)return;
