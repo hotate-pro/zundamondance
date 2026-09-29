@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Zundamon Virtual Window</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101c22;color:white;font-family:system-ui,sans-serif;overflow:hidden}canvas{display:block}
+#ui{position:fixed;top:16px;left:16px;background:#10272ddd;backdrop-filter:blur(12px);border:1px solid #ffffff33;border-radius:18px;padding:16px;max-width:330px;z-index:3;box-shadow:0 8px 30px #0004}h1{font-size:19px;margin:0 0 9px}p{font-size:12px;line-height:1.6;margin:8px 0}button,label.file{border:0;border-radius:10px;padding:9px 12px;background:#9ee57b;color:#173119;font-weight:700;cursor:pointer;display:inline-block;margin:3px}button.secondary{background:#344f55;color:white}input[type=file]{display:none}#status{color:#d1f4d4}#cam{position:fixed;right:12px;bottom:12px;width:150px;border-radius:12px;opacity:.65;transform:scaleX(-1);display:none}#hint{position:fixed;bottom:14px;left:16px;font-size:12px;color:#fff9;text-shadow:0 1px 5px #000}#ui.min #details{display:none}@media(max-width:600px){#ui{max-width:calc(100vw - 24px);top:10px;left:12px;padding:11px}h1{font-size:16px}}
+</style>
+<script type="importmap">{"imports":{"three":"https://esm.sh/three@0.170.0","three/addons/":"https://esm.sh/three@0.170.0/examples/jsm/","@pixiv/three-vrm":"https://esm.sh/@pixiv/three-vrm@3.4.2?external=three"}}</script></head>
+<body><section id="ui"><h1>🌱 ずんだもんバーチャル窓</h1><div id="details">
+<p id="status">公園を準備中…</p>
+<label class="file">VRMを読み込む<input id="model" type="file" accept=".vrm"></label>
+<button id="camera">📷 顔追跡を開始</button><button id="reset" class="secondary">視点リセット</button>
+<p>頭を動かして公園をのぞこう！ 顔追跡なしでもマウス・タッチで試せます。VRMが未登録の場合は仮キャラを表示します。</p>
+<p>顔追跡はカメラ映像を端末内で処理します。顔までの距離は概算です。明るい場所で試してね。</p></div><button id="collapse" class="secondary">パネルを隠す</button></section>
+<video id="cam" autoplay muted playsinline></video><div id="hint">マウス移動：視点変更　|　ホイール：距離変更　|　F：全画面</div>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {VRMLoaderPlugin,VRMUtils} from '@pixiv/three-vrm';
+const $=id=>document.getElementById(id),status=s=>$('status').textContent=s;
+const scene=new THREE.Scene();scene.background=new THREE.Color('#94ccec');scene.fog=new THREE.Fog('#94ccec',22,62);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;document.body.prepend(renderer.domElement);
+const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.03,120);scene.add(new THREE.HemisphereLight('#e7f5ff','#64874e',2.2));
+const sun=new THREE.DirectionalLight('#fff2c4',2.4);sun.position.set(-6,11,4);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-16;sun.shadow.camera.right=16;sun.shadow.camera.top=16;sun.shadow.camera.bottom=-16;scene.add(sun);
+const mat=(c)=>new THREE.MeshStandardMaterial({color:c,roughness:.94});
+const grass=mat('#79b85d'),bark=mat('#785337'),leaf=[mat('#4e9b54'),mat('#6eb75b'),mat('#8ac85b')];
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(140,140),grass);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+const path=new THREE.Mesh(new THREE.PlaneGeometry(2.4,55),mat('#e2cda1'));path.rotation.x=-Math.PI/2;path.position.set(3,.012,-15);scene.add(path);
+const sphere=new THREE.SphereGeometry(1,9,7);
+function tree(x,z,s=1){const g=new THREE.Group();const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.17,.23,2.3,7),bark);trunk.position.y=1.15;trunk.castShadow=true;g.add(trunk);for(let i=0;i<3;i++){let crown=new THREE.Mesh(sphere,leaf[(Math.random()*leaf.length)|0]);crown.position.set((i-1)*.48,2.45+Math.random()*.6,Math.random()*.45);crown.scale.set(1.08,1.03,1.05);crown.castShadow=true;g.add(crown)}g.position.set(x,0,z);g.scale.setScalar(s);scene.add(g)}
+for(let i=0;i<30;i++){let x=(Math.random()-.5)*47,z=-3-Math.random()*45;if(Math.abs(x)<5&&z>-13)continue;tree(x,z,.75+Math.random()*.65)}
+function bench(x,z){const wood=mat('#a76c3d'),metal=mat('#4c5354');const g=new THREE.Group();for(let y of [.57,1.08]){const slat=new THREE.Mesh(new THREE.BoxGeometry(1.8,.15,.16),wood);slat.position.set(0,y,y===.57?0:-.35);slat.castShadow=true;g.add(slat)}for(let x0 of [-.7,.7]){const leg=new THREE.Mesh(new THREE.BoxGeometry(.08,.6,.08),metal);leg.position.set(x0,.29,0);g.add(leg)}g.position.set(x,0,z);scene.add(g)}bench(-3,-4);bench(5,-8);
+const flowers=[mat('#f7c9e2'),mat('#fff1b8'),mat('#d7e8ff')];for(let i=0;i<180;i++){let x=(Math.random()-.5)*32,z=-Math.random()*35;if(Math.abs(x-3)<1.5)continue;const f=new THREE.Mesh(new THREE.IcosahedronGeometry(.055,0),flowers[i%3]);f.position.set(x,.07,z);scene.add(f)}
+// Character stands behind the physical screen, at world z=-3.
+const dancer=new THREE.Group();dancer.position.set(0,0,-3);scene.add(dancer);
+const placeholder=new THREE.Group();const green=mat('#8cdb75'),skin=mat('#e9d1ad'),dark=mat('#31552c');
+const body=new THREE.Mesh(new THREE.CapsuleGeometry(.28,.58,4,10),green);body.position.y=.86;placeholder.add(body);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.33,16,12),skin);head.position.y=1.65;placeholder.add(head);
+for(const x of [-.21,.21]){const ear=new THREE.Mesh(new THREE.ConeGeometry(.13,.38,7),green);ear.position.set(x,2.01,0);ear.rotation.z=x>0?-.25:.25;placeholder.add(ear)}
+const eyes=mat('#222b22');for(const x of [-.12,.12]){const eye=new THREE.Mesh(new THREE.SphereGeometry(.026,8,8),eyes);eye.position.set(x,1.69,.31);placeholder.add(eye)}
+dancer.add(placeholder);
+let vrm=null,elapsed=0;
+function getBone(name){return vrm?.humanoid?.getNormalizedBoneNode(name)}
+function animateDance(t){const beat=t*3.2;dancer.position.y=Math.abs(Math.sin(beat))*.075;dancer.rotation.y=Math.sin(beat*.5)*.26;
+if(!vrm){body.rotation.z=Math.sin(beat)*.13;head.rotation.z=Math.sin(beat+.8)*.15;return}
+const set=(name,axis,value)=>{let b=getBone(name);if(b)b.rotation[axis]=value};
+set('hips','y',Math.sin(beat*.5)*.16);set('spine','z',Math.sin(beat)*.12);set('chest','z',Math.sin(beat+.3)*.1);
+set('head','z',Math.sin(beat+.9)*.12);
+set('leftUpperArm','z',-.6-Math.sin(beat)*.52);set('rightUpperArm','z',.6+Math.sin(beat)*.52);
+set('leftLowerArm','y',Math.sin(beat+.8)*.35);set('rightLowerArm','y',-Math.sin(beat+.8)*.35);
+set('leftUpperLeg','x',Math.sin(beat)*.3);set('rightUpperLeg','x',-Math.sin(beat)*.3);
+set('leftLowerLeg','x',Math.max(0,Math.sin(beat))*.28);set('rightLowerLeg','x',Math.max(0,-Math.sin(beat))*.28);
+vrm.update(1/60)}
+const loader=new GLTFLoader();loader.register(parser=>new VRMLoaderPlugin(parser));
+async function loadModel(url){status('VRMを読み込み中…');try{const gltf=await loader.loadAsync(url);if(!gltf.userData.vrm)throw Error('VRMとして読み込めませんでした');if(vrm){dancer.remove(vrm.scene);VRMUtils.deepDispose(vrm.scene)}vrm=gltf.userData.vrm;VRMUtils.rotateVRM0(vrm);vrm.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});placeholder.visible=false;dancer.add(vrm.scene);status('ずんだもん登場！ 公園でダンス中 🌱')}catch(e){console.error(e);status('VRM読み込み失敗: '+e.message)}}
+$('model').onchange=async e=>{const f=e.target.files[0];if(f){const url=URL.createObjectURL(f);await loadModel(url);URL.revokeObjectURL(url)}};
+loadModel('./models/Zundamon.vrm').catch(()=>{});
+const headPos=new THREE.Vector3(0,0,0),target=new THREE.Vector3(0,0,0);
+let tracking=false,tracker=null,stream=null,detectBusy=false,lastDetect=0,baseFace=null;
+function projection(){// Screen at z=0. Eye is on the viewer side (+z), world behind screen (-z).
+const aspect=innerWidth/innerHeight;const physicalW=.53,physicalH=physicalW/aspect;
+const eyeZ=Math.max(.3,headPos.z+0.7),eyeX=headPos.x,eyeY=headPos.y;
+const near=.05;const l=(-physicalW/2-eyeX)*near/eyeZ,r=(physicalW/2-eyeX)*near/eyeZ;
+const b=(-physicalH/2-eyeY)*near/eyeZ,t=(physicalH/2-eyeY)*near/eyeZ;
+camera.projectionMatrix.makePerspective(l,r,t,b,near,120);camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+camera.position.set(eyeX,eyeY+1.25,eyeZ);camera.rotation.set(0,0,0)}
+// Render world in monitor coordinates: eye baseline y=1.25, window center y=1.25.
+const view=new THREE.Group();scene.add(view); // scene objects stay in world coordinates; projection uses y offset below.
+function updateProjection(){const aspect=innerWidth/innerHeight,W=.53,H=W/aspect,z=Math.max(.3,headPos.z+.7),x=headPos.x,y=headPos.y;
+camera.near=.05;camera.far=120;camera.projectionMatrix.makePerspective((-W/2-x)*.05/z,(W/2-x)*.05/z,(H/2-y)*.05/z,(-H/2-y)*.05/z,.05,120);camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();camera.position.set(x,1.25+y,z);camera.rotation.set(0,0,0)}
+let mouseX=0,mouseY=0,wheel=0;addEventListener('pointermove',e=>{if(tracking)return;mouseX=(e.clientX/innerWidth-.5)*.55;mouseY=(.5-e.clientY/innerHeight)*.35});addEventListener('wheel',e=>{wheel=THREE.MathUtils.clamp(wheel+e.deltaY*.0005,-.25,.8)},{passive:true});
+$('reset').onclick=()=>{mouseX=mouseY=wheel=0;baseFace=null;target.set(0,0,0)};
+$('collapse').onclick=()=>{$('ui').classList.toggle('min');$('collapse').textContent=$('ui').classList.contains('min')?'設定を表示':'パネルを隠す'};
+addEventListener('keydown',e=>{if(e.key.toLowerCase()==='f')document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()});
+$('camera').onclick=async()=>{if(tracking){tracking=false;stream?.getTracks().forEach(t=>t.stop());$('cam').style.display='none';$('camera').textContent='📷 顔追跡を開始';status('マウス操作に切り替えました');return}
+try{status('カメラと顔認識を準備中…');const {FaceLandmarker,FilesetResolver}=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm');
+const vision=await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm');
+tracker=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',delegate:'CPU'},runningMode:'VIDEO',numFaces:1});
+stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:640,height:480},audio:false});$('cam').srcObject=stream;await $('cam').play();$('cam').style.display='block';tracking=true;baseFace=null;$('camera').textContent='⏹ 顔追跡を停止';status('顔追跡中！ 正面を向いて頭を動かしてね')}catch(e){console.error(e);stream?.getTracks().forEach(t=>t.stop());tracking=false;status('カメラを開始できません: '+e.message+'（マウス操作は使えます）')}}
+function detect(now){if(!tracking||!tracker||$('cam').readyState<2||now-lastDetect<65)return;lastDetect=now;try{const res=tracker.detectForVideo($('cam'),now);const pts=res.faceLandmarks?.[0];if(!pts)return;const left=pts[33],right=pts[263],nose=pts[1];if(!left||!right||!nose)return;const span=Math.hypot(left.x-right.x,left.y-right.y);if(span<.01)return;
+const cx=(left.x+right.x)/2,cy=(left.y+right.y)/2;if(!baseFace)baseFace={cx,cy,span};
+const ratio=baseFace.span/span;target.set(THREE.MathUtils.clamp((baseFace.cx-cx)*.55,-.32,.32),THREE.MathUtils.clamp((baseFace.cy-cy)*.42,-.25,.25),THREE.MathUtils.clamp((ratio-1)*.7,-.28,.7))}catch(e){console.warn(e)}}
+let last=performance.now();function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000,.05);last=now;elapsed+=dt;detect(now);if(!tracking)target.set(mouseX,mouseY,wheel);headPos.lerp(target,1-Math.exp(-dt*10));updateProjection();animateDance(elapsed);renderer.render(scene,camera)}
+addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);updateProjection()});requestAnimationFrame(frame);
+status('公園完成！ VRMを選ぶか、models/Zundamon.vrm を配置してね');
+</script></body></html>
