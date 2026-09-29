@@ -130,7 +130,7 @@ $('motion').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{motion
 fetch('./motions/YAJU-U.vmd',{cache:'force-cache'}).then(r=>r.ok?r.arrayBuffer():Promise.reject()).then(b=>{motionData=parseVMD(b);if(vrm)motion=createVMDPlayer(vrm,motionData)}).catch(()=>{});
 let voiceUrl=null;const voiceAudio=new Audio();
 $('voice').onchange=e=>{const f=e.target.files[0];if(!f)return;if(voiceUrl)URL.revokeObjectURL(voiceUrl);voiceUrl=URL.createObjectURL(f);voiceAudio.src=voiceUrl;status('音声をセット！ 🔊')};
-$('speak').onclick=async()=>{try{if(!voiceAudio.src)throw Error();voiceAudio.currentTime=0;await voiceAudio.play();}catch{status('VOICEVOXなどで作った音声ファイルを選んでね')}}();
+$('speak').onclick=async()=>{try{if(!voiceAudio.src)throw Error();voiceAudio.currentTime=0;await voiceAudio.play();}catch{status('VOICEVOXなどで作った音声ファイルを選んでね')}};
 
 let tracking=false,tracker=null,stream=null,faceBase=null,lastDetect=0;
 async function startCamera(){
