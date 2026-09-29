@@ -1,0 +1,36 @@
+name: Build local browser assets
+on:
+  push:
+    branches: [main]
+    paths: ['index.html', 'vmd.js', 'package.json', 'scripts/**', '.github/workflows/build.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies and bundle
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Download face landmark model once into repository
+        run: |
+          mkdir -p vendor/mediapipe
+          curl --fail --location --retry 3 --output vendor/mediapipe/face_landmarker.task https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+          test -s vendor/mediapipe/face_landmarker.task
+      - name: Commit generated static assets
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add bundle.js vendor/mediapipe
+          if ! git diff --cached --quiet; then
+            git commit -m "Build local dependencies and face model [skip ci]"
+            git push
+          fi
