@@ -152,6 +152,7 @@ async function loadVRM(url){
   const gltf=await loader.loadAsync(url);const next=gltf.userData.vrm;if(!next)throw Error('VRMとして読み込めません');
   if(vrm){window.__dancerGroup.remove(vrm.scene);VRMUtils.deepDispose(vrm.scene)}
   vrm=next;VRMUtils.rotateVRM0(vrm);vrm.scene.traverse(o=>{if(o.isMesh)o.frustumCulled=false});
+  if(window.__placeholder?.dg)window.__placeholder.dg.visible=false;
   window.__dancerGroup.add(vrm.scene);
   if(motionData)motion=createVMDPlayer(vrm,motionData);
   status(motion?'ずんだもん＋YAJU＆Uモーション準備完了！':'ずんだもん登場！');
